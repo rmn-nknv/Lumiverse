@@ -126,7 +126,7 @@ function normalizeProtectedCandidate(text: string): string {
 
 function isPlausibleProtectedCandidate(text: string): boolean {
   if (text.length < 2 || text.length > 120) return false;
-  if (!/[A-Za-z0-9]/.test(text)) return false;
+  if (!/[\p{L}\p{N}]/u.test(text)) return false;
   if (text.split(/\s+/).length > 16) return false;
   return true;
 }
