@@ -1262,6 +1262,10 @@ const FACT_COMMON_VERBS = new Set([
   "gained", "broke", "destroyed", "created", "joined", "left",
 ]);
 
+// Any letter outside the Latin script. The English verb heuristic below is
+// only meaningful for Latin-script facts.
+const NON_LATIN_LETTER_RE = /(?=\p{L})\P{Script=Latin}/u;
+
 function validateKeyFacts(raw: any): string[] {
   if (!Array.isArray(raw)) return [];
 
@@ -1272,16 +1276,16 @@ function validateKeyFacts(raw: any): string[] {
     if (typeof fact !== "string") continue;
     const cleaned = fact.replace(/\s+/g, " ").trim();
     if (cleaned.length < 8 || cleaned.length > 220) continue;
-    if (!/[a-zA-Z]/.test(cleaned)) continue;
+    if (!/\p{L}/u.test(cleaned)) continue;
     if (!cleaned.includes(" ")) continue;
-    if (/^[A-Z\s]+$/.test(cleaned)) continue;
+    if (/^[\p{Lu}\s]+$/u.test(cleaned)) continue;
     if (/[:;,\-]$/.test(cleaned)) continue;
 
     const words = cleaned.split(/\s+/);
     if (words.length < 3) continue;
-    if (/^[a-z]/.test(cleaned)) continue;
+    if (/^\p{Ll}/u.test(cleaned)) continue;
 
-    const hasVerb = words.some((w) => {
+    const hasVerb = NON_LATIN_LETTER_RE.test(cleaned) || words.some((w) => {
       const lower = w.toLowerCase().replace(/[.,;:!?]$/, "");
       if (FACT_COMMON_VERBS.has(lower)) return true;
       if (/(?:ed|es|ing)$/.test(lower) && lower.length >= 4) return true;
@@ -1412,8 +1416,8 @@ function isValidEntityName(name: string): boolean {
   // Too short or too long
   if (trimmed.length < 2 || trimmed.length > 80) return false;
 
-  // Must contain at least one letter
-  if (!/[a-zA-Z]/.test(trimmed)) return false;
+  // Must contain at least one letter (any script)
+  if (!/\p{L}/u.test(trimmed)) return false;
 
   // Reject bracket/special char garbage (e.g., "E B[2 M[1 ---")
   if (/[\[\]{}|<>#@\\~`]/.test(trimmed)) return false;
@@ -1429,12 +1433,13 @@ function isValidEntityName(name: string): boolean {
   const firstWord = words[0].toLowerCase().replace(/[\u2018\u2019\u02BC'']/g, "'");
   if (PRONOUN_STARTS.has(firstWord)) return false;
 
-  // Multi-word: must have at least one word starting with uppercase (proper noun evidence)
-  if (words.length > 1 && !words.some((w) => /^[A-Z]/.test(w))) return false;
+  // Multi-word: must have at least one word starting with uppercase (proper noun evidence).
+  // Letters from scripts without case (CJK, Arabic, ...) count as capitalized.
+  if (words.length > 1 && !words.some((w) => /^(?!\p{Ll})\p{L}/u.test(w))) return false;
 
   // ALL-CAPS single words are emphasis/shouting, not proper nouns
   // (proper nouns are title-cased in prose, not ALL-CAPS)
-  if (words.length === 1 && trimmed.length > 1 && /^[A-Z]+$/.test(trimmed)) return false;
+  if (words.length === 1 && trimmed.length > 1 && /^\p{Lu}+$/u.test(trimmed)) return false;
 
   // Single-word: reject known verbs, expletives, adjectives, common nouns
   if (words.length === 1) {

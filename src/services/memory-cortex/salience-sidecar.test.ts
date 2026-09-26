@@ -89,6 +89,99 @@ describe("parseToolCallResults", () => {
   });
 });
 
+describe("parseToolCallResults with non-Latin scripts", () => {
+  test("keeps Cyrillic sidecar output that passes the same checks as Latin text", () => {
+    const result = parseToolCallResults([
+      {
+        name: "score_salience",
+        args: {
+          importance: 7,
+          key_facts: [
+            "Мария пообещала вернуться домой вечером",
+            "Мария купила iPhone вчера вечером",
+            "предательство раскрылось в полночь",
+            "ТАЙНА РАСКРЫТА НАКОНЕЦ",
+            "измена",
+          ],
+        },
+      },
+      {
+        name: "extract_entities",
+        args: {
+          entities: [
+            { name: "Мария", type: "character", role: "subject" },
+            { name: "Старый Город", type: "location" },
+            { name: "старый город", type: "location" },
+            { name: "МАРИЯ", type: "character" },
+          ],
+          discovered_aliases: [
+            { canonical_name: "Мария", alias: "Маша", evidence: "Зови меня Маша" },
+          ],
+          status_changes: [
+            { entity: "Мария", change: "arrived", detail: "Мария вернулась в Старый Город" },
+          ],
+        },
+      },
+      {
+        name: "extract_relationships",
+        args: {
+          relationships: [
+            { source: "Мария", target: "Иван", type: "ally", label: "союзники", sentiment: 0.8 },
+          ],
+        },
+      },
+      {
+        name: "extract_font_colors",
+        args: {
+          color_attributions: [
+            { hex_color: "#FF9999", character_name: "Мария", usage_type: "speech" },
+          ],
+        },
+      },
+    ]);
+
+    expect(result.keyFacts).toEqual([
+      "Мария пообещала вернуться домой вечером",
+      "Мария купила iPhone вчера вечером",
+    ]);
+    expect(result.entitiesPresent.map((entity) => entity.name)).toEqual(["Мария", "Старый Город"]);
+    expect(result.discoveredAliases).toEqual([
+      { canonicalName: "Мария", alias: "Маша", evidence: "Зови меня Маша" },
+    ]);
+    expect(result.statusChanges).toEqual([
+      { entity: "Мария", change: "arrived", detail: "Мария вернулась в Старый Город" },
+    ]);
+    expect(result.relationshipsShown).toEqual([
+      { source: "Мария", target: "Иван", type: "ally", label: "союзники", sentiment: 0.8 },
+    ]);
+    expect(result.fontColors).toEqual([
+      { hexColor: "#ff9999", characterName: "Мария", usageType: "speech" },
+    ]);
+  });
+
+  test("still requires an English verb in Latin-only facts", () => {
+    const result = parseToolCallResults([
+      {
+        name: "score_salience",
+        args: { key_facts: ["Melina of the Pale Court", "Melina rules the Pale Court"] },
+      },
+    ]);
+
+    expect(result.keyFacts).toEqual(["Melina rules the Pale Court"]);
+  });
+
+  test("accepts multi-word entity names from scripts without letter case", () => {
+    const result = parseToolCallResults([
+      {
+        name: "extract_entities",
+        args: { entities: [{ name: "山田 太郎", type: "character" }, { name: "محمد علي", type: "character" }] },
+      },
+    ]);
+
+    expect(result.entitiesPresent.map((entity) => entity.name)).toEqual(["山田 太郎", "محمد علي"]);
+  });
+});
+
 describe("extractBatchWithSidecar", () => {
   test("ignores sparse tool-call entries from a provider", async () => {
     const result = await extractBatchWithSidecar([

@@ -22,13 +22,14 @@ const PHRASE_START_REJECTS = new Set([
   "through", "to", "toward", "under", "unless", "until", "when", "where", "while", "with", "without",
 ]);
 
-function normalizeAliasKey(value: string): string {
+// Keys keep letters, combining marks and digits of any script.
+export function normalizeAliasKey(value: string): string {
   return value
     .trim()
     .toLowerCase()
     .replace(/^the\s+/i, "")
     .replace(/[\u2018\u2019\u02BC'']/g, "'")
-    .replace(/[^a-z0-9\s'-]/g, "")
+    .replace(/[^\p{L}\p{M}\p{N}\s'-]/gu, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -37,15 +38,17 @@ function isNameLikeWord(word: string): boolean {
   const cleaned = word.replace(/^["'\u201C\u201D\u2018\u2019()[\]{}]+|["'\u201C\u201D\u2018\u2019()[\]{}.,!?;:]+$/g, "");
   if (!cleaned) return false;
   if (ALLOWED_PARTICLES.has(cleaned.toLowerCase())) return true;
-  return /^[A-Z][a-z]+(?:[-'][A-Z][a-z]+)?$/.test(cleaned)
-    || /^[A-Z][a-z]+[A-Z][A-Za-z]*$/.test(cleaned)
-    || /^[A-Z]{2,4}$/.test(cleaned);
+  return /^\p{Lu}\p{Ll}+(?:[-']\p{Lu}\p{Ll}+)?$/u.test(cleaned)
+    || /^\p{Lu}\p{Ll}+\p{Lu}[\p{Lu}\p{Ll}]*$/u.test(cleaned)
+    || /^\p{Lu}{2,4}$/u.test(cleaned)
+    // Scripts without letter case (CJK, Arabic, ...) carry no capitalization signal
+    || /^\p{Lo}[\p{Lo}\p{Lm}\p{M}]*$/u.test(cleaned);
 }
 
 export function isPlausibleAlias(alias: string, canonicalName?: string): boolean {
   const trimmed = alias.trim().replace(/\s+/g, " ");
   if (trimmed.length < 2 || trimmed.length > 50) return false;
-  if (!/[A-Za-z]/.test(trimmed)) return false;
+  if (!/\p{L}/u.test(trimmed)) return false;
   if (/[\r\n\[\]{}|<>#@\\~`]/.test(trimmed)) return false;
   if (/^[-\u2014\u2013\s_.=]+$/.test(trimmed)) return false;
   if (/[.!?;:]$/.test(trimmed)) return false;
@@ -63,13 +66,13 @@ export function isPlausibleAlias(alias: string, canonicalName?: string): boolean
 
   if (words.length === 1) {
     if (COMMON_ALIAS_REJECTS.has(first)) return false;
-    if (/^[A-Z]{5,}$/.test(trimmed)) return false;
+    if (/^\p{Lu}{5,}$/u.test(trimmed)) return false;
     return isNameLikeWord(trimmed);
   }
 
   const significantWords = words.filter((word) => !ALLOWED_PARTICLES.has(word.toLowerCase()));
   if (significantWords.length === 0) return false;
-  if (!significantWords.some((word) => /^[A-Z]/.test(word))) return false;
+  if (!significantWords.some((word) => /^(?!\p{Ll})\p{L}/u.test(word))) return false;
   if (significantWords.some((word) => COMMON_ALIAS_REJECTS.has(word.toLowerCase()))) return false;
   return words.every(isNameLikeWord);
 }
